@@ -4,10 +4,16 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"errors"
+	"github.com/emicklei/go-restful"
 	"io"
 	"net/http"
 	"strings"
 )
+
+type Compressor interface {
+	io.WriteCloser
+	Flush() error
+}
 
 const (
 	header_AcceptEncoding  = "Accept-Encoding"
@@ -54,12 +60,12 @@ func wantsCompressedResponse(httpRequest *http.Request) (bool, string) {
 
 type compressionResponseWriter struct {
 	writer     http.ResponseWriter
-	compressor io.WriteCloser
+	compressor Compressor
 	encoding   string
 }
 
 func NewCompressionResponseWriter(w http.ResponseWriter, encoding string) *compressionResponseWriter {
-	var compressor io.WriteCloser
+	var compressor Compressor
 	switch encoding {
 	case encoding_gzip:
 		compressor = gzip.NewWriter(w)
@@ -114,9 +120,22 @@ func (c *compressionResponseWriter) Close() error {
 }
 
 func (c *compressionResponseWriter) Flush() {
-	c.Close()
+	c.compressor.Flush()
 }
 
 func (c *compressionResponseWriter) isCompressorClosed() bool {
 	return nil == c.compressor
+}
+
+func RestfulWithCompression(function restful.RouteFunction) restful.RouteFunction {
+	return restful.RouteFunction(func(request *restful.Request, response *restful.Response) {
+		//don't compress watches
+		wantsCompression, encoding := wantsCompressedResponse(request.Request)
+		if wantsCompression && request.QueryParameter("watch") != "true" {
+			compressionWriter := NewCompressionResponseWriter(response.ResponseWriter, encoding)
+			compressionWriter.Header().Set("Content-Encoding", encoding)
+			response.ResponseWriter = compressionWriter
+		}
+		function(request, response)
+	})
 }
