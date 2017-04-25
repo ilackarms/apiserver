@@ -497,6 +497,7 @@ func DefaultBuildHandlerChain(apiHandler http.Handler, c *Config) http.Handler {
 	handler = genericfilters.WithMaxInFlightLimit(handler, c.MaxRequestsInFlight, c.MaxMutatingRequestsInFlight, c.RequestContextMapper, c.LongRunningFunc)
 	handler = genericapifilters.WithRequestInfo(handler, NewRequestInfoResolver(c), c.RequestContextMapper)
 	handler = apirequest.WithRequestContext(handler, c.RequestContextMapper)
+	handler = genericfilters.WithCompression(handler)
 	return handler
 }
 
